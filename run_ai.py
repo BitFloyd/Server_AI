@@ -1,78 +1,155 @@
 import numpy as np
 import json
-
 from Environment import agent
 from Environment import server_env
 from Qlearn import qlearn
+import matplotlib.pyplot as plt
+
+plt.ioff()
+import matplotlib
+
+matplotlib.use('Agg')
 
 # parameters
-epsilon = .4 # exploration
-num_actions = 8  # [ # 0 => -2 , 1 => -1 , 2 => 0, 3 => +1, 4 => +2, 5 => flash_change_temp]
-epoch = 1000
-max_memory = 500
-hidden_size = 100
-batch_size = 100
-grid_size = 10
+epsilon = .4  # Exploration coefficient
+num_choices = 5
+epoch = 1000  # Number of epochs to be trained
+max_memory = 2000  # Max memory of q-learning from which batches are selected
+batch_size = 100  # Batch size of each training iteration
 
-agent = agent.Agent(learning_rate=0.00001)
+# Get the AI model
+agent = agent.Agent(learning_rate=0.00001, num_choices=num_choices)
 model = agent.model
 
-# If you want to continue training from a previous model, just uncomment the line bellow
+# If you want to continue training from a previous model, just uncomment the line below and make Train=False
 # model.load_weights("model.h5")
+train = True
 
 # Define environment/game
-env = server_env.Server(optimum_temp=(21.0, 22.0), start_month=0, initial_n_users=20, initial_rdt=30, weight_power=0.8)
+a = 21.0
+b = 22.0
+env = server_env.Server(optimum_temp=(a, b), start_month=0, initial_n_users=20, initial_rdt=30)
+optimum_temp_avg = (a + b) / 2.0
 
 # Initialize experience replay object
 exp_replay = qlearn.ExperienceReplay(max_memory=max_memory)
 
 # Train
 score = 0
+score_list=[]
+if (train):
+    for e in range(epoch):
 
-for e in range(epoch):
+        score = 0
+        loss = 0.
+        new_month = np.random.randint(0, 12)
+        print new_month
+        env.reset(new_month=new_month)
+        game_over = False
+        # get initial input
+        input_t, x, y, z = env.observe()
+        timestep = 0
 
-    score = 0
-    loss = 0.
-    env.reset()
-    game_over = False
-    # get initial input
-    input_t,x,y,z = env.observe()
-    timestep = 0
+        while ((not game_over) and timestep <= 5 * 30 * 24 * 60):
 
-    while (not game_over and timestep < 2000):
+            input_tm1 = input_t  # set input state
 
-        print timestep
-        input_tm1 = input_t
-        # get next action
+            # Get next action to be performed (Exploration or model choice for next action)
+            if np.random.rand() <= epsilon:
+                choice = np.random.randint(0, num_choices)
+                if (choice - 2 < 0):
+                    action = 0
+                else:
+                    action = 1
 
-        if np.random.rand() <= epsilon:
-            action = np.random.randint(0, num_actions, size=1)
-            print "EPSILON ACTION:", action
-        else:
-            q = model.predict(input_tm1)
-            print q
-            action = np.argmax(q[0])
-            print "ACTION:", action
-        # apply action, get rewards and new state
+                power_expended = abs(choice - 2) * 5
 
-        input_t, inp, reward, game_over = env.update_env(action,int(timestep/(200)))
+            else:
+                q = model.predict(input_tm1)
+                choice = np.argmax(q[0])
 
-        if reward > 0:
-            score += reward
+                if (choice - 2 < 0):
+                    action = 0
+                else:
+                    action = 1
 
-        # store experience
-        exp_replay.remember([input_tm1, action, reward, input_t], game_over)
+                power_expended = abs(choice - 2) * 5
 
-        # adapt model
-        inputs, targets = exp_replay.get_batch(model, batch_size=batch_size)
+            # apply action, get rewards and new state
+            input_t, inp, reward, game_over = env.update_env(action, power_expended, int(timestep / (30 * 24 * 60)))
 
-        loss += model.train_on_batch(inputs, targets)
+            if reward > 0:
+                score += reward
 
-        timestep+=1
+            # store experience
+            exp_replay.remember([input_tm1, choice, reward, input_t], game_over)
 
-    print("Epoch {:03d}/999 | Loss {:.4f} | Win count {}".format(e, loss, score))
+            # adapt model
+            inputs, targets = exp_replay.get_batch(model, batch_size=batch_size)
 
-# Save trained model weights and architecture, this will be used by the visualization code
-model.save_weights("model.h5", overwrite=True)
-with open("model.json", "w") as outfile:
-    json.dump(model.to_json(), outfile)
+            # Loss from the epoch updated
+            loss += model.train_on_batch(inputs, targets)
+
+            timestep += 1
+
+        score_list.append(score)
+        print("Epoch {:03d}/999 | Loss {:.4f} | Win count {}".format(e, loss, score))
+        print env.score_tot
+        print env.energy_tot
+        print env.energy_wo_agent_tot
+
+    # Save trained model weights and architecture, this will be used by the visualization code
+    model.save_weights("model.h5", overwrite=True)
+    with open("model.json", "w") as outfile:
+        json.dump(model.to_json(), outfile)
+# Make plot of the scores temperature
+temp_ai_score, = plt.plot(score_list, label='AI scores per epoch')
+plt.ylabel('AI scores per epoch')
+plt.xlabel('Epochs')
+plt.legend(handles=[temp_ai_score])
+plt.savefig('score_plot.png')
+plt.close()
+
+print "START EXECUTION PHASE"
+temp_list = []
+temp_list_optimum_avg = []
+env.train = 0
+num_minutes_in_year = 365 * 24 * 60
+input_t, x, y, z = env.observe()
+
+choice_change = 0
+
+for i in range(0, num_minutes_in_year):
+    month = np.int(round(num_minutes_in_year / (30 * 24 * 60))) % 12
+    # print month
+    q = model.predict(input_t)
+    choice = np.argmax(q[0])
+
+    if (choice_change != choice):
+        choice_change = choice
+        print choice_change
+
+    if (choice - 2 < 0):
+        action = 0
+    else:
+        action = 1
+
+    power_expended = abs(choice - 2) * 5
+    input_t, inp, reward, game_over = env.update_env(action, power_expended, month)
+    temp_list.append(env.maintained_core_temp)
+    temp_list_optimum_avg.append(optimum_temp_avg)
+
+print env.score_tot
+print env.energy_tot
+print env.energy_wo_agent_tot
+
+print "ENERGY SAVED %", ((env.energy_wo_agent_tot - env.energy_tot) / env.energy_wo_agent_tot) * 100
+
+# Make plot of the server temperature
+temp_ai, = plt.plot(temp_list, label='Temperature from AI')
+temp_opt, = plt.plot(temp_list_optimum_avg, label='Optimum temperature')
+plt.ylabel('Maintained core temperature')
+plt.xlabel('Timesteps: minutes')
+plt.legend(handles=[temp_ai, temp_opt])
+plt.savefig('temp_plot.png')
+plt.close()

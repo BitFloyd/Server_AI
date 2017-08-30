@@ -1,20 +1,26 @@
-from keras.models import Sequential
-from keras.layers import Dense
+from keras.models import Model
+from keras.layers import Dense,Input
 from keras.optimizers import Adam
 
 
 class Agent(object):
 
-    def __init__(self,learning_rate=0.001):
+    def __init__(self,learning_rate=0.001,num_choices=5):
 
         self.learning_rate = learning_rate
-        self.model = Sequential()
+        inp = Input(shape=(3,))
+        x = Dense(16,  activation='relu')(inp)
+        x = Dense(10, activation='relu')(x)
+        y = Dense(num_choices, activation='softmax')(x)
 
-        self.model.add(Dense(3, input_dim=3, activation='sigmoid'))
-        self.model.add(Dense(2, activation='sigmoid'))
-        self.model.add(Dense(8, activation='softmax'))
+        # 0 - -10
+        # 1 - -5
+        # 2 - 0
+        # 3 - +5
+        # 4 - +10
 
-        # 0 => -2 , 1 => -1 , 2 => 0, 3 => +1, 4 => +2, 5 => flash_change_temp
+
+        self.model = Model(inputs=inp,outputs=y)
 
         self.model.compile(loss='mse', optimizer=Adam(lr=self.learning_rate))
 

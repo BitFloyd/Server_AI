@@ -15,35 +15,32 @@ class Server(object):
        Absolute minimum temperature - core_temp_min
 
        Month when simulation is started - start_month
-       Number of users that can go up or down per minute - num_users_update
-       Data transmission that can change per minute - rdt_update
+       Max Number of users that can go up or down per minute - num_users_update
+       Max Data transmission that can change per minute - rdt_update
+
        Lower threshold for number of users - num_users_lt
        Lower threshold for data transmission - rdt_lt
+
        Maximum number of users - max_users_ht
        Maximum rdt - max_rdt
-
-       Effect of users on the temperature - effect_users
-       Effect of data transmission on temperature - effect_data
-       Effect on performance from the number of users if temperature is not optimum - perf_effect_users
-       Effect on performance from the rdt if temperature is not optimum - perf_rdt
-       Weight given to power saving - weight_power
-       Weight given to performance - weight_perf
 
        Initial number of users - initial_n_users
 
        Variables
        ---------
        Atmospheric temperature - atm_temp
+
        Temperature of core - core_temp
 
        Number of users at time in the server - n_users
+
        Rate of data transmission - rdt
 
        Energy spent by AI - energy
-       Total energy spent - energy_tot
-       Total energy spent without the agent - energy_wo_agent_tot
 
-       Performance score - perf_score
+       Total energy spent - energy_tot
+
+       Total energy spent without the agent - energy_wo_agent_tot
 
        Score per update - score
        Total score -  score_tot
@@ -57,47 +54,49 @@ class Server(object):
 
     atm_temp = avg_temp_month[0]
 
-    num_users_update = 50
+    # Number of users
+    num_users_update = 10
     num_users_lt = 10
-    num_users_ht = 300
+    num_users_ht = 100
+    num_users_ptp = num_users_ht - num_users_lt
 
     initial_n_users = num_users_lt
     n_users = initial_n_users
 
-    rdt_update = 100
+    # RDT
+    rdt_update = 20
     rdt_lt = 20
-    rdt_ht = 500
+    rdt_ht = 300
+    rdt_ptp = rdt_ht - rdt_lt
 
     initial_rdt = rdt_lt
     rdt = initial_rdt
 
-    effect_users = 0.05
-    effect_data = 0.05
+    effect_users = 0.1
+    effect_data = 0.1
 
     core_temp = atm_temp + n_users * effect_users + rdt * effect_data
     maintained_core_temp = core_temp
     core_temp_max = 80
     core_temp_min = -10
-    max_change = core_temp_max - core_temp_min
 
-    perf_effect_users = 0.3
-    perf_effect_data = 0.1
+    power_expended_ptp = core_temp_max - core_temp_min
+
+    max_change = core_temp_max - core_temp_min
 
     energy = 0.0
     energy_tot = 0.0
     energy_wo_agent_tot = 0.0
-
-    perf_score = 0
-    weight_perf = 0.5
-    weight_power = 0.5
 
     score = 0.0
     score_tot = 0.0
 
     game_over = 0
 
-    def __init__(self, optimum_temp=(20.0, 22.0), start_month=0, initial_n_users=10, initial_rdt=60, weight_power=0.5):
+    # train or run
+    train = 1
 
+    def __init__(self, optimum_temp=(20.0, 22.0), start_month=0, initial_n_users=10, initial_rdt=60):
         # INITIALIZE THE SERVER
 
         assert (initial_n_users >= self.initial_n_users)
@@ -116,63 +115,31 @@ class Server(object):
         self.core_temp = self.atm_temp + self.n_users * self.effect_users + self.rdt * self.effect_data
         self.maintained_core_temp = self.core_temp
 
-        self.weight_power = weight_power
-        self.weight_perf = 1 - weight_power
+    def update_env(self, action, power_expended, month):
 
-    def update_env(self, action, month):
-
-
+        # print "#########################"
         # DO THE ACTION
-
-        temp_change_from_action = 0
-        # temp_change_from_action = action*self.max_change
-
-        # 0 = -2
-        # 1 = -1
-        # 3 = 0
-        # 4 = +1
-        # 5 = +2
-        # 6 = flash cool
 
         flash_required = 0
         if (self.maintained_core_temp < self.core_temp_opt[0]):
             flash_required = self.core_temp_opt[0] - self.maintained_core_temp
+            sign_flash_required = 1
         elif (self.maintained_core_temp > self.core_temp_opt[1]):
-            flash_required = self.core_temp_opt[1] - self.maintained_core_temp
+            flash_required = self.maintained_core_temp - self.core_temp_opt[1]
+            sign_flash_required = -1
 
         if (action == 0):
-            temp_change_from_action = -3
+            temp_change_from_action = -power_expended
         elif (action == 1):
-            temp_change_from_action = -2
-        elif (action == 2):
-            temp_change_from_action = -1
-        elif (action == 3):
-            temp_change_from_action = 0
-        elif (action == 4):
-            temp_change_from_action = 1
-        elif (action == 5):
-            temp_change_from_action = 2
-        elif (action == 6):
-            temp_change_from_action = 3
-        elif (action == 7):
-            temp_change_from_action = flash_required
-
-
-        print "---------------------------------------------------"
-        print "BEFORE ACTION"
-        print "-------------"
-        print "MAINTAINED CORE TEMP:", self.maintained_core_temp, "FLASH REQD:", flash_required
-
+            temp_change_from_action = power_expended
 
         # UPDATE THE ENERGY STATS
-        self.energy = temp_change_from_action
-        self.energy_tot += temp_change_from_action
+        self.energy = power_expended
+        self.energy_tot += power_expended
         self.energy_wo_agent_tot += flash_required
 
         # GET THE SCORE TO BE RETURNED. SCORE - Energy saved - Performance
-        self.score = (self.weight_perf * np.abs(flash_required))**2 - self.weight_power * np.abs(temp_change_from_action)**2
-        self.score = 10*self.score
-
+        self.score = abs(abs(flash_required)-power_expended)/1000
         # self.score = self.weight_power * (flash_required - temp_change_from_action) - self.weight_perf * (flash_required)
         self.score_tot += self.score
 
@@ -193,33 +160,39 @@ class Server(object):
         self.n_users = new_n_users
         self.rdt = new_rdt
 
-        self.atm_temp = self.avg_temp_month[month]
+        self.atm_temp = self.avg_temp_month[month%12]
         core_temp_past = self.core_temp
         self.core_temp = self.atm_temp + self.n_users * self.effect_users + self.rdt * self.effect_data
         core_temp_delta = self.core_temp - core_temp_past
 
-        print "CTD:", core_temp_delta
         self.maintained_core_temp = self.maintained_core_temp + core_temp_delta + temp_change_from_action
 
+        # print "MAINTAINED CORE TEMP:", self.maintained_core_temp
+        # print "SCORE:", self.score
+
         if (self.maintained_core_temp > self.core_temp_max or self.maintained_core_temp < self.core_temp_min):
-            self.game_over = 1
+            # print "GAME OVER"
+            if (self.train == 1):
+                self.game_over = 1
+            else:
+                self.energy_tot += flash_required
+                self.maintained_core_temp = self.maintained_core_temp + sign_flash_required * flash_required
 
         # Return the maintained_core_temp, the score, and the game status.
 
 
-        scaled_core_temp = (self.maintained_core_temp - self.core_temp_min) / (self.core_temp_max - self.core_temp_min + 0.0)
-        scaled_n_users = (self.n_users-self.num_users_lt)/(self.num_users_ht-self.num_users_lt)
-        scaled_rdt = (self.rdt-self.rdt_lt)/(self.rdt_ht-self.rdt_lt)
+        scaled_core_temp = (self.maintained_core_temp - self.core_temp_min) / (
+            self.core_temp_max - self.core_temp_min + 0.0)
+        scaled_n_users = (self.n_users - self.num_users_lt) / (self.num_users_ht - self.num_users_lt)
+        scaled_rdt = (self.rdt - self.rdt_lt) / (self.rdt_ht - self.rdt_lt)
 
-        scaled_states = np.matrix([scaled_core_temp,scaled_n_users,scaled_rdt])
-
-        print "AFTER ACTION"
-        print "MAINTAINED CORE TEMP:", self.maintained_core_temp, "SCORE:", self.score
+        scaled_states = np.matrix([scaled_core_temp, scaled_n_users, scaled_rdt])
 
         return scaled_states, self.maintained_core_temp, self.score, self.game_over
 
-    def reset(self):
-        self.atm_temp = self.avg_temp_month[self.start_month]
+    def reset(self,new_month):
+        self.atm_temp = self.avg_temp_month[new_month]
+        self.start_month = new_month
 
         self.n_users = self.initial_n_users
         self.rdt = self.initial_rdt
@@ -230,12 +203,16 @@ class Server(object):
         self.energy = 0
         self.energy_tot = 0
         self.energy_wo_agent_tot = 0
+        self.score_tot = 0
+        self.score = 0
+        self.train = 1
 
     def observe(self):
-        scaled_core_temp = (self.maintained_core_temp - self.core_temp_min) / (self.core_temp_max - self.core_temp_min + 0.0)
-        scaled_n_users = (self.n_users-self.num_users_lt)/(self.num_users_ht-self.num_users_lt)
-        scaled_rdt = (self.rdt-self.rdt_lt)/(self.rdt_ht-self.rdt_lt)
+        scaled_core_temp = (self.maintained_core_temp - self.core_temp_min) / (
+            self.core_temp_max - self.core_temp_min + 0.0)
+        scaled_n_users = (self.n_users - self.num_users_lt) / (self.num_users_ptp)
+        scaled_rdt = (self.rdt - self.rdt_lt) / (self.rdt_ptp)
 
-        scaled_states = np.matrix([scaled_core_temp,scaled_n_users,scaled_rdt])
+        scaled_states = np.matrix([scaled_core_temp, scaled_n_users, scaled_rdt])
 
         return scaled_states, self.maintained_core_temp, self.score, self.game_over
