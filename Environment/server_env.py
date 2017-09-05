@@ -50,12 +50,12 @@ class Server(object):
 
     """
 
-    avg_temp_month = [11.0, 15.0, 16.0, 20.0, 21.0, 22.0, 23.0, 24.0, 22.0, 20.0, 18.0, 15.0]
+    avg_temp_month = [1.0, 5.0, 7.0, 10.0, 11.0, 20.0, 23.0, 24.0, 22.0, 10.0, 5.0, 1.0]
 
     atm_temp = avg_temp_month[0]
 
     # Number of users
-    num_users_update = 10
+    num_users_update = 5
     num_users_lt = 10
     num_users_ht = 100
     num_users_ptp = num_users_ht - num_users_lt
@@ -64,7 +64,7 @@ class Server(object):
     n_users = initial_n_users
 
     # RDT
-    rdt_update = 20
+    rdt_update = 10
     rdt_lt = 20
     rdt_ht = 300
     rdt_ptp = rdt_ht - rdt_lt
@@ -78,7 +78,7 @@ class Server(object):
     core_temp = atm_temp + n_users * effect_users + rdt * effect_data
     maintained_core_temp = core_temp
     core_temp_max = 80
-    core_temp_min = -10
+    core_temp_min = -20
 
     power_expended_ptp = core_temp_max - core_temp_min
 
@@ -139,7 +139,7 @@ class Server(object):
         self.energy_wo_agent_tot += flash_required
 
         # GET THE SCORE TO BE RETURNED. SCORE - Energy saved - Performance
-        self.score = abs(abs(flash_required)-power_expended)/1000
+        self.score = 1e-3*(abs(abs(flash_required)-power_expended)) - 0.1e-3*(abs(flash_required))
         # self.score = self.weight_power * (flash_required - temp_change_from_action) - self.weight_perf * (flash_required)
         self.score_tot += self.score
 
@@ -179,8 +179,6 @@ class Server(object):
                 self.maintained_core_temp = self.maintained_core_temp + sign_flash_required * flash_required
 
         # Return the maintained_core_temp, the score, and the game status.
-
-
         scaled_core_temp = (self.maintained_core_temp - self.core_temp_min) / (
             self.core_temp_max - self.core_temp_min + 0.0)
         scaled_n_users = (self.n_users - self.num_users_lt) / (self.num_users_ht - self.num_users_lt)

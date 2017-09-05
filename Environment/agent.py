@@ -9,8 +9,8 @@ class Agent(object):
 
         self.learning_rate = learning_rate
         inp = Input(shape=(3,))
-        x = Dense(16,  activation='relu')(inp)
-        x = Dense(10, activation='relu')(x)
+        x = Dense(16,  activation='sigmoid')(inp)
+        x = Dense(10, activation='sigmoid')(x)
         y = Dense(num_choices, activation='softmax')(x)
 
         # 0 - -10
